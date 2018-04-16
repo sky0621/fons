@@ -1,7 +1,11 @@
-gitlabApiUrl="https://{host}" # GitLab API URL
-privateToken="{token}" # GitLab PrivateToken (Read more https://docs.gitlab.com/ce/api/README.html#private-tokens )
-gitlabSshUrl="ssh://git@{host}:{port}" # GitLab SSH URL
-branch="master" # GitLab target branch
-outDir="{fullpath}" # GitLab Repositories output directory
-filterInNameSpace="{namespace}"
-filterOutProject="{out1},{out2},{out3}"
+outputDir="{fullpath}" # Repositories output directory
+
+[gitlab]
+  hostURL="https://{host}" # API URL
+  privateToken="{token}" # https://docs.gitlab.com/ce/api/README.html#private-tokens
+  gitCloneURL="ssh://git@{host}:{port}" # SSH URL for 'git clone'
+  branch="master" # checkout branch
+
+[filter]
+  targetNameSpaces="{namespace1},{namespace2}"
+  excludeProjects="{out1},{out2},{out3}"
