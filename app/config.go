@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/spf13/viper"
 )
@@ -47,5 +48,22 @@ func NewConfig(path string) (*Config, error) {
 
 // Host4GitCommand ...
 func (c *Config) Host4GitCommand(pathWithNamespace string) string {
+	if c == nil {
+		return ""
+	}
+	if c.Gitlab == nil {
+		return ""
+	}
 	return fmt.Sprintf("%s/%s.git", c.Gitlab.GitCloneURL, pathWithNamespace)
+}
+
+// ExcludeProjectSlice ...
+func (c *Config) ExcludeProjectSlice() []string {
+	if c == nil {
+		return nil
+	}
+	if c.Filter == nil {
+		return nil
+	}
+	return strings.Split(c.Filter.ExcludeProjects, ",")
 }

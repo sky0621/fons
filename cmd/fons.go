@@ -18,6 +18,7 @@ var (
 	configPath = flag.String("f", "./config.toml", "Config File")
 )
 
+// TODO 機能実現スピード最優先での実装なので要リファクタ
 func main() {
 	os.Exit(realMain())
 }
@@ -43,8 +44,16 @@ func realMain() int {
 		panic(errors.New("not 200 OK"))
 	}
 
-	// FIXME goroutine
-	fmt.Println(namespaces)
+	exitCh := make(chan struct{})
+	go func(exitCh chan struct{}) {
+		// FIXME goroutine
+		fmt.Println(namespaces)
+
+	}(exitCh)
+
+	fmt.Println("before exitCh")
+	exitCh <- struct{}{}
+	fmt.Println("after exitCh")
 
 	return 0
 }
