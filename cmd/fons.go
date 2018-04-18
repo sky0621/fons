@@ -1,17 +1,14 @@
 package main
 
 import (
-	"errors"
 	"flag"
 	"fmt"
 	"os"
+	"os/exec"
+	"path/filepath"
+	"runtime"
 
 	"github.com/sky0621/fons/app"
-	gitlab "github.com/xanzy/go-gitlab"
-)
-
-const (
-	perPage = 99999
 )
 
 var (
@@ -31,29 +28,96 @@ func realMain() int {
 		return 1
 	}
 
-	glCli := app.NewGitLabClient(cfg.Gitlab)
-	namespaces, res, err := glCli.Namespaces(&gitlab.ListNamespacesOptions{
-		ListOptions: gitlab.ListOptions{
-			PerPage: perPage,
-		},
-	})
-	if err != nil {
-		panic(err)
-	}
-	if res.Status != "200 OK" {
-		panic(errors.New("not 200 OK"))
-	}
-
 	exitCh := make(chan struct{})
-	go func(exitCh chan struct{}) {
-		// FIXME goroutine
-		fmt.Println(namespaces)
+	defer func() {
+		close(exitCh)
+	}()
 
-	}(exitCh)
+	go func(exitCh chan struct{}, cfg *app.Config) {
+
+		maxConcurrentGoroutineNum := runtime.NumCPU() * 3
+		fmt.Printf("maxConcurrentGoroutineNum:%d\n", maxConcurrentGoroutineNum)
+		semaphore := make(chan struct{}, maxConcurrentGoroutineNum)
+		defer func() {
+			close(semaphore)
+		}()
+
+		glCli := app.NewGitLabClient(cfg.Gitlab)
+
+		// ネームスペース数が膨大になることは想定しないため、同期ループ
+		for _, ns := range glCli.Namespaces() {
+			fmt.Printf("namespace.Path:%s\n", ns.Path)
+			if !cfg.IsTargetNamespace(ns.Path) {
+				continue
+			}
+
+			pathInfos := cfg.TargetProjectPathInfos(ns.Path)
+
+			for _, project := range glCli.Projects() {
+				if ns.Path != project.Namespace.Path {
+					continue
+				}
+				if cfg.IsExcludeProject(project.Path) {
+					continue
+				}
+
+				semaphore <- struct{}{}
+
+				// TODO 関数化
+				go func(semaphore chan struct{}, cfg *app.Config, namespacePath, projectPath string) {
+					defer func() {
+						<-semaphore
+					}()
+
+					if exists(pathInfos, func(filename string) bool {
+						return filename == project.Path
+					}) {
+						err := os.Chdir(filepath.Join(cfg.OutputDir, namespacePath, projectPath))
+						if err != nil {
+							panic(err)
+						}
+
+						cmd := exec.Command("git", "pull")
+						err = cmd.Run()
+						if err != nil {
+							fmt.Println(err)
+						}
+					} else {
+						cmd := exec.Command("git", "clone", cfg.Host4GitCommand(project.PathWithNamespace), filepath.Join(cfg.OutputDir, namespacePath, projectPath))
+						err := cmd.Run()
+						if err != nil {
+							panic(err)
+						}
+
+						err = os.Chdir(filepath.Join(cfg.OutputDir, namespacePath, projectPath))
+						if err != nil {
+							panic(err)
+						}
+
+						cmd3 := exec.Command("git", "checkout", "-b", cfg.Gitlab.Branch, "origin/"+cfg.Gitlab.Branch)
+						err = cmd3.Run()
+						if err != nil {
+							fmt.Println(err)
+						}
+					}
+				}(semaphore, cfg, ns.Path, project.Path)
+			}
+		}
+		exitCh <- struct{}{}
+	}(exitCh, cfg)
 
 	fmt.Println("before exitCh")
-	exitCh <- struct{}{}
+	<-exitCh
 	fmt.Println("after exitCh")
 
 	return 0
+}
+
+func exists(files []os.FileInfo, fn func(filename string) bool) bool {
+	for _, file := range files {
+		if exists := fn(file.Name()); exists {
+			return true
+		}
+	}
+	return false
 }
