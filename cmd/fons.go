@@ -43,6 +43,7 @@ func realMain() int {
 		}()
 
 		glCli := app.NewGitLabClient(cfg.Gitlab)
+		fmt.Println("after glCli := app.NewGitLabClient(cfg.Gitlab)")
 
 		// ネームスペース数が膨大になることは想定しないため、同期ループ
 		for _, ns := range glCli.Namespaces() {
@@ -52,16 +53,21 @@ func realMain() int {
 			}
 
 			pathInfos := cfg.TargetProjectPathInfos(ns.Path)
+			fmt.Printf("pathInfos:%#v\n", pathInfos)
 
 			for _, project := range glCli.Projects() {
+				fmt.Printf("project.Namespace.Path:%s\n", project.Namespace.Path)
 				if ns.Path != project.Namespace.Path {
 					continue
 				}
+				fmt.Printf("project.Path:%s\n", project.Path)
 				if cfg.IsExcludeProject(project.Path) {
 					continue
 				}
 
+				fmt.Println("before semaphore <- struct{}{}")
 				semaphore <- struct{}{}
+				fmt.Println("after semaphore <- struct{}{}")
 
 				// TODO 関数化
 				go func(semaphore chan struct{}, cfg *app.Config, namespacePath, projectPath string) {
@@ -69,36 +75,50 @@ func realMain() int {
 						<-semaphore
 					}()
 
+					fmt.Printf("[@goroutine]namespacePath:%s, projectPath:%s\n", namespacePath, projectPath)
 					if exists(pathInfos, func(filename string) bool {
 						return filename == project.Path
 					}) {
+						fmt.Println("before Chdir")
 						err := os.Chdir(filepath.Join(cfg.OutputDir, namespacePath, projectPath))
 						if err != nil {
-							panic(err)
+							fmt.Println(err)
+							return
 						}
+						fmt.Println("after Chdir")
 
+						fmt.Println("before git pull")
 						cmd := exec.Command("git", "pull")
 						err = cmd.Run()
 						if err != nil {
 							fmt.Println(err)
 						}
+						fmt.Println("after git pull")
 					} else {
+						fmt.Println("before git clone")
 						cmd := exec.Command("git", "clone", cfg.Host4GitCommand(project.PathWithNamespace), filepath.Join(cfg.OutputDir, namespacePath, projectPath))
 						err := cmd.Run()
 						if err != nil {
-							panic(err)
+							fmt.Println(err)
+							return
 						}
+						fmt.Println("after git clone")
 
+						fmt.Println("before Chdir")
 						err = os.Chdir(filepath.Join(cfg.OutputDir, namespacePath, projectPath))
 						if err != nil {
-							panic(err)
+							fmt.Println(err)
+							return
 						}
+						fmt.Println("after Chdir")
 
+						fmt.Println("before git checkout")
 						cmd3 := exec.Command("git", "checkout", "-b", cfg.Gitlab.Branch, "origin/"+cfg.Gitlab.Branch)
 						err = cmd3.Run()
 						if err != nil {
 							fmt.Println(err)
 						}
+						fmt.Println("after git checkout")
 					}
 				}(semaphore, cfg, ns.Path, project.Path)
 			}

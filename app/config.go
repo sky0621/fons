@@ -17,6 +17,10 @@ type Config struct {
 	Filter    *FilterConfig
 }
 
+func (c *Config) String() string {
+	return fmt.Sprintf("OutputDir:%s, %s, %s", c.OutputDir, c.Gitlab.String(), c.Filter.String())
+}
+
 // GitlabConfig ...
 type GitlabConfig struct {
 	HostURL      string
@@ -25,10 +29,18 @@ type GitlabConfig struct {
 	Branch       string
 }
 
+func (c *GitlabConfig) String() string {
+	return fmt.Sprintf("GitlabConfig{HostURL:%s, PrivateToken:%s, GitCloneURL:%s, Branch:%s}", c.HostURL, c.PrivateToken, c.GitCloneURL, c.Branch)
+}
+
 // FilterConfig ...
 type FilterConfig struct {
 	TargetNameSpaces string
 	ExcludeProjects  string
+}
+
+func (c *FilterConfig) String() string {
+	return fmt.Sprintf("FilterConfig{TargetNameSpaces:%s, ExcludeProjects:%s}", c.TargetNameSpaces, c.ExcludeProjects)
 }
 
 // NewConfig ...
@@ -45,6 +57,8 @@ func NewConfig(path string) (*Config, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	fmt.Printf("[CONFIG]%s\n", conf.String())
 
 	return &conf, nil
 }
@@ -120,7 +134,11 @@ func (c *Config) TargetProjectPathInfos(path string) []os.FileInfo {
 // IsExcludeProject ...
 func (c *Config) IsExcludeProject(p string) bool {
 	for _, outPrj := range c.ExcludeProjectSlice() {
+		if outPrj == "" {
+			continue
+		}
 		if strings.Contains(p, outPrj) {
+			fmt.Printf("[[IsExcludeProject]] path:%s, outPrj:%s\n", p, outPrj)
 			return true
 		}
 	}
